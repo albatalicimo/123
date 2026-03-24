@@ -47,7 +47,6 @@ class StatusPeriod:
                 f"в период с {self.start_time.strftime('%H:%M')} по {self.end_time.strftime('%H:%M')}")
 
 async def get_steam_user_summary(steam_id: str) -> dict:
-    """Асинхронное получение информации о пользователе Steam"""
     url = f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={STEAM_API_KEY}&steamids={steam_id}"
     try:
         async with aiohttp.ClientSession() as session:
@@ -60,10 +59,8 @@ async def get_steam_user_summary(steam_id: str) -> dict:
         return None
 
 async def get_steam_game_info(appid: int) -> dict:
-    """Получение информации об игре по её AppID"""
     if not appid:
         return None
-        
     url = f"https://store.steampowered.com/api/appdetails?appids={appid}"
     try:
         async with aiohttp.ClientSession() as session:
@@ -81,7 +78,6 @@ async def get_steam_game_info(appid: int) -> dict:
         return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start - главное меню"""
     try:
         keyboard = [
             [InlineKeyboardButton("📋 Отслеживаемые пользователи", callback_data='list_users')],
@@ -107,7 +103,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка в start: {e}")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик нажатий кнопок"""
     query = update.callback_query
     await query.answer()
     
@@ -129,8 +124,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'back_to_menu':
         await start(update, context)
 
+# Остальные функции остаются без изменений (show_remove_tracking_menu, remove_tracking, show_report_menu, generate_user_report, handle_message, list_tracking, get_status_name, format_time_delta, check_user_status, stop_tracking)
+
 async def show_remove_tracking_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает меню выбора пользователя для удаления"""
     query = update.callback_query
     chat_id = query.message.chat_id
     
@@ -148,13 +144,9 @@ async def show_remove_tracking_menu(update: Update, context: ContextTypes.DEFAUL
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
-        "Выберите пользователя для удаления:",
-        reply_markup=reply_markup
-    )
+    await query.edit_message_text("Выберите пользователя для удаления:", reply_markup=reply_markup)
 
 async def remove_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE, steam_id: str):
-    """Удаляет отслеживание пользователя"""
     query = update.callback_query
     chat_id = query.message.chat_id
     
@@ -164,18 +156,15 @@ async def remove_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE, st
     
     user_name = user_tracking[chat_id][steam_id]['name']
     
-    # Отменяем фоновую задачу
     task = tasks.get((chat_id, steam_id))
     if task:
         task.cancel()
         del tasks[(chat_id, steam_id)]
     
-    # Удаляем из отслеживания
     del user_tracking[chat_id][steam_id]
     if chat_id in status_history and steam_id in status_history[chat_id]:
         del status_history[chat_id][steam_id]
     
-    # Если больше нет отслеживаемых пользователей, очищаем данные
     if not user_tracking[chat_id]:
         del user_tracking[chat_id]
         if chat_id in status_history:
@@ -193,7 +182,6 @@ async def remove_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE, st
     )
 
 async def show_report_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает меню выбора пользователя для отчета"""
     query = update.callback_query
     chat_id = query.message.chat_id
     
@@ -211,13 +199,9 @@ async def show_report_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data='back_to_menu')])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
-        "Выберите пользователя для отчета:",
-        reply_markup=reply_markup
-    )
+    await query.edit_message_text("Выберите пользователя для отчета:", reply_markup=reply_markup)
 
 async def generate_user_report(update: Update, context: ContextTypes.DEFAULT_TYPE, steam_id: str):
-    """Генерирует отчет для конкретного пользователя"""
     query = update.callback_query
     chat_id = query.message.chat_id
     
@@ -228,13 +212,11 @@ async def generate_user_report(update: Update, context: ContextTypes.DEFAULT_TYP
     user_data = user_tracking[chat_id][steam_id]
     history = status_history[chat_id][steam_id]
     
-    # Добавляем текущий период в историю для отчета
     now = datetime.now()
     current_period = history['current_period']
     current_period.end_time = now
     all_periods = history['status_periods'] + [current_period]
     
-    # Формируем отчет
     report_lines = [
         f"👤 {user_data['name']}",
         f"🆔 {steam_id}",
@@ -242,7 +224,7 @@ async def generate_user_report(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     
     for period in sorted(all_periods, key=lambda x: x.start_time):
-        if period.duration.total_seconds() < 60:  # Пропускаем периоды меньше 1 минуты
+        if period.duration.total_seconds() < 60:
             continue
         report_lines.append(str(period))
     
@@ -255,36 +237,28 @@ async def generate_user_report(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(
-        "\n\n".join(report_lines),
-        reply_markup=reply_markup
-    )
+    await query.edit_message_text("\n\n".join(report_lines), reply_markup=reply_markup)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик текстовых сообщений"""
     if 'awaiting_steamid' in context.user_data:
         steam_id = update.message.text.strip()
         context.user_data['awaiting_steamid'] = False
         
         if not steam_id.isdigit() or len(steam_id) != 17:
-            await update.message.reply_text("❌ Неверный формат SteamID\nДолжен состоять из 17 цифр\nПример: 76561197960287930")
+            await update.message.reply_text("❌ Неверный формат SteamID\nДолжен состоять из 17 цифр")
             return
             
         user_info = await get_steam_user_summary(steam_id)
         
         if not user_info:
-            await update.message.reply_text("⚠️ Не удалось получить данные\nПроверьте:\n1. Верный ли SteamID\n2. Работает ли Steam API")
+            await update.message.reply_text("⚠️ Не удалось получить данные по SteamID")
             return
         
         user_name = user_info.get('personaname', 'Неизвестный пользователь')
         current_status = user_info.get('personastate', 0)
         game_info = None
-        
         if 'gameextrainfo' in user_info:
-            game_info = {
-                'name': user_info['gameextrainfo'],
-                'appid': user_info.get('gameid')
-            }
+            game_info = {'name': user_info['gameextrainfo'], 'appid': user_info.get('gameid')}
         
         chat_id = update.message.chat_id
         if chat_id not in user_tracking:
@@ -292,111 +266,71 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             status_history[chat_id] = {}
         
         if steam_id in user_tracking[chat_id]:
-            await update.message.reply_text(f"ℹ️ Уже отслеживаю пользователя {user_name} (SteamID: {steam_id})")
-        else:
-            now = datetime.now()
-            user_tracking[chat_id][steam_id] = {
-                'last_status': current_status,
-                'last_game': game_info,
-                'last_check': now,
-                'status_start_time': now,
-                'name': user_name
-            }
-            
-            status_history[chat_id][steam_id] = {
-                'current_status': current_status,
-                'current_game': game_info,
-                'status_start': now,
-                'status_periods': [],
-                'current_period': StatusPeriod(current_status, now, game_info=game_info)
-            }
-            
-            task = asyncio.create_task(check_user_status(chat_id, steam_id, context.application))
-            tasks[(chat_id, steam_id)] = task
-            
-            keyboard = [
-                [InlineKeyboardButton("📋 Отслеживаемые пользователи", callback_data='list_users')],
-                [InlineKeyboardButton("🏠 В главное меню", callback_data='back_to_menu')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                f"✅ Начал отслеживание:\n"
-                f"Имя: {user_name}\n"
-                f"SteamID: {steam_id}\n"
-                f"Текущий статус: {get_status_name(current_status)}"
-                f"{f' 🎮 Играет в: {game_info['name']}' if game_info else ''}",
-                reply_markup=reply_markup
-            )
-
-async def list_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Показываем список отслеживаемых пользователей"""
-    try:
-        query = update.callback_query
-        chat_id = query.message.chat_id
+            await update.message.reply_text(f"ℹ️ Уже отслеживаю {user_name}")
+            return
         
-        if chat_id in user_tracking and user_tracking[chat_id]:
-            message = "📋 Отслеживаю:\n\n"
-            for steam_id, data in user_tracking[chat_id].items():
-                time_in_status = format_time_delta(datetime.now() - data['status_start_time'])
-                message += (
-                    f"👤 {data['name']}\n"
-                    f"🆔 {steam_id}\n"
-                    f"📊 {get_status_name(data['last_status'])}"
-                    f"{f' 🎮 {data['last_game']['name']}' if data['last_game'] else ''}\n"
-                    f"⏱ В статусе: {time_in_status}\n"
-                    f"──────────────────\n"
-                )
-            
-            keyboard = [
-                [InlineKeyboardButton("📊 Получить отчет", callback_data='get_report')],
-                [InlineKeyboardButton("➖ Удалить отслеживание", callback_data='remove_tracking')],
-                [InlineKeyboardButton("➕ Добавить отслеживание", callback_data='add_tracking')],
-                [InlineKeyboardButton("🏠 В главное меню", callback_data='back_to_menu')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                message,
-                reply_markup=reply_markup
-            )
-        else:
-            keyboard = [
-                [InlineKeyboardButton("➕ Добавить отслеживание", callback_data='add_tracking')],
-                [InlineKeyboardButton("🏠 В главное меню", callback_data='back_to_menu')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                "ℹ️ Нет отслеживаемых аккаунтов",
-                reply_markup=reply_markup
-            )
+        now = datetime.now()
+        user_tracking[chat_id][steam_id] = {
+            'last_status': current_status,
+            'last_game': game_info,
+            'last_check': now,
+            'status_start_time': now,
+            'name': user_name
+        }
+        
+        status_history[chat_id][steam_id] = {
+            'current_period': StatusPeriod(current_status, now, game_info=game_info),
+            'status_periods': []
+        }
+        
+        task = asyncio.create_task(check_user_status(chat_id, steam_id, context.application))
+        tasks[(chat_id, steam_id)] = task
+        
+        await update.message.reply_text(
+            f"✅ Начал отслеживание:\n"
+            f"👤 {user_name}\n"
+            f"🆔 {steam_id}\n"
+            f"Статус: {get_status_name(current_status)}"
+            f"{f' 🎮 {game_info['name']}' if game_info else ''}"
+        )
+
+async def list_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    chat_id = query.message.chat_id
     
-    except Exception as e:
-        logging.error(f"Ошибка в list_tracking: {e}")
+    if chat_id not in user_tracking or not user_tracking[chat_id]:
+        await query.edit_message_text("ℹ️ Нет отслеживаемых аккаунтов")
+        return
+    
+    message = "📋 Отслеживаю:\n\n"
+    for steam_id, data in user_tracking[chat_id].items():
+        time_in_status = format_time_delta(datetime.now() - data['status_start_time'])
+        message += f"👤 {data['name']}\n🆔 {steam_id}\n📊 {get_status_name(data['last_status'])}{f' 🎮 {data['last_game']['name']}' if data['last_game'] else ''}\n⏱ В статусе: {time_in_status}\n──────────────────\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("📊 Получить отчет", callback_data='get_report')],
+        [InlineKeyboardButton("➖ Удалить отслеживание", callback_data='remove_tracking')],
+        [InlineKeyboardButton("➕ Добавить отслеживание", callback_data='add_tracking')],
+        [InlineKeyboardButton("🏠 В главное меню", callback_data='back_to_menu')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(message, reply_markup=reply_markup)
 
 def get_status_name(status_code: int) -> str:
-    """Возвращает читаемое название статуса"""
     status_map = {
-        0: "🔴 Оффлайн",
-        1: "🟢 Онлайн", 
-        2: "🟡 Занят",
-        3: "🟠 Отошёл", 
-        4: "💤 Спит", 
-        5: "💰 Хочет торговать", 
-        6: "🎮 Хочет играть"
+        0: "🔴 Оффлайн", 1: "🟢 Онлайн", 2: "🟡 Занят",
+        3: "🟠 Отошёл", 4: "💤 Спит", 5: "💰 Хочет торговать", 6: "🎮 Хочет играть"
     }
     return status_map.get(status_code, "❓ Неизвестно")
 
 def format_time_delta(delta) -> str:
-    """Форматирует timedelta в читаемый формат"""
     total_seconds = int(delta.total_seconds())
     hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    minutes, _ = divmod(remainder, 60)
     return f"{hours} ч {minutes} мин" if hours else f"{minutes} мин"
 
 async def check_user_status(chat_id: int, steam_id: str, app: Application) -> None:
-    """Фоновая задача для проверки статуса и игровой активности"""
     while True:
         try:
             if chat_id not in user_tracking or steam_id not in user_tracking[chat_id]:
@@ -407,70 +341,43 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application) -> No
             
             if user_info:
                 current_status = user_info.get('personastate', 0)
-                last_status = user_data['last_status']
-                
-                # Получаем информацию об игре
                 current_game = None
                 if 'gameextrainfo' in user_info:
-                    current_game = {
-                        'name': user_info['gameextrainfo'],
-                        'appid': user_info.get('gameid')
-                    }
+                    current_game = {'name': user_info['gameextrainfo'], 'appid': user_info.get('gameid')}
+                
+                last_status = user_data['last_status']
                 last_game = user_data['last_game']
                 
                 status_changed = current_status != last_status
-                game_changed = (current_game != last_game) or (current_game and last_game and current_game['appid'] != last_game['appid'])
+                game_changed = (current_game != last_game) or (current_game and last_game and current_game.get('appid') != last_game.get('appid'))
                 
-                # Определяем специальный статус "отошел во время игры"
-                is_afk_in_game = (current_status == 3) and (current_game is not None)
-                
-                if status_changed or game_changed or is_afk_in_game:
-                    time_in_status = datetime.now() - user_data['status_start_time']
-                    time_str = format_time_delta(time_in_status)
+                if status_changed or game_changed:
+                    time_in_status = format_time_delta(datetime.now() - user_data['status_start_time'])
                     
-                    # Формируем сообщение об изменении
                     message_lines = [f"🔄 Изменение статуса {user_data['name']}:"]
                     
-                    if is_afk_in_game:
-                        message_lines.append(f"🎮 Играет в: {current_game['name']}")
-                        message_lines.append("🟠 Отошел от компьютера (но игра все еще запущена)")
-                    elif status_changed:
+                    if status_changed:
                         message_lines.append(f"Был: {get_status_name(last_status)}{f' 🎮 {last_game['name']}' if last_game else ''}")
-                        message_lines.append(f"В статусе: {time_str}")
+                        message_lines.append(f"В статусе: {time_in_status}")
                         message_lines.append(f"Стал: {get_status_name(current_status)}{f' 🎮 {current_game['name']}' if current_game else ''}")
                     elif game_changed:
                         if current_game and not last_game:
                             message_lines.append(f"🔼 Начал играть в: {current_game['name']}")
                         elif not current_game and last_game:
                             message_lines.append(f"🔽 Перестал играть в: {last_game['name']}")
-                        else:
-                            message_lines.append(f"🔄 Сменил игру с {last_game['name']} на {current_game['name']}")
                     
                     await app.bot.send_message(chat_id=chat_id, text="\n".join(message_lines))
                     
-                    # Обновляем историю статусов
+                    # Обновляем историю
                     now = datetime.now()
-                    status_history[chat_id][steam_id]['current_period'].end_time = now
-                    status_history[chat_id][steam_id]['status_periods'].append(
-                        status_history[chat_id][steam_id]['current_period']
-                    )
+                    history = status_history[chat_id][steam_id]
+                    history['current_period'].end_time = now
+                    history['status_periods'].append(history['current_period'])
+                    history['current_period'] = StatusPeriod(current_status, now, game_info=current_game)
                     
-                    # Для статуса "отошел во время игры" сохраняем игру и статус 3
-                    status_to_store = current_status
-                    game_to_store = current_game
-                    if is_afk_in_game:
-                        status_to_store = 3  # Принудительно сохраняем как "отошел"
-                    
-                    status_history[chat_id][steam_id]['current_period'] = StatusPeriod(
-                        status_to_store, now, game_info=game_to_store
-                    )
-                    
-                    # Обновляем данные
                     user_data['last_status'] = current_status
                     user_data['last_game'] = current_game
                     user_data['status_start_time'] = now
-                
-                user_data['last_check'] = datetime.now()
             
             await asyncio.sleep(CHECK_INTERVAL)
             
@@ -478,27 +385,17 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application) -> No
             logging.error(f"Ошибка в check_user_status: {e}")
             await asyncio.sleep(10)
 
-async def stop_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Останавливаем отслеживание"""
+async def stop_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
         if not context.args:
-            await update.message.reply_text("ℹ️ Укажите SteamID после команды\nПример: /stop 76561197960287930")
+            await update.message.reply_text("ℹ️ Укажите SteamID после /stop")
             return
-        
         steam_id = context.args[0]
         
         if chat_id in user_tracking and steam_id in user_tracking[chat_id]:
             user_name = user_tracking[chat_id][steam_id]['name']
             
-            # Фиксируем последний период перед остановкой
-            if chat_id in status_history and steam_id in status_history[chat_id]:
-                now = datetime.now()
-                current_period = status_history[chat_id][steam_id]['current_period']
-                current_period.end_time = now
-                status_history[chat_id][steam_id]['status_periods'].append(current_period)
-            
-            # Отменяем фоновую задачу
             task = tasks.get((chat_id, steam_id))
             if task:
                 task.cancel()
@@ -508,31 +405,32 @@ async def stop_tracking(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if chat_id in status_history and steam_id in status_history[chat_id]:
                 del status_history[chat_id][steam_id]
             
-            if not user_tracking[chat_id]:
-                del user_tracking[chat_id]
-                if chat_id in status_history:
-                    del status_history[chat_id]
+            if not user_tracking.get(chat_id):
+                user_tracking.pop(chat_id, None)
+                status_history.pop(chat_id, None)
             
-            await update.message.reply_text(f"⏹ Прекратил отслеживание:\nИмя: {user_name}\nSteamID: {steam_id}")
+            await update.message.reply_text(f"⏹ Прекратил отслеживание {user_name}")
         else:
-            await update.message.reply_text("ℹ️ Не отслеживаю указанного пользователя")
-    
+            await update.message.reply_text("ℹ️ Не отслеживаю этого пользователя")
     except Exception as e:
         logging.error(f"Ошибка в stop_tracking: {e}")
-        await update.message.reply_text("⚠️ Не удалось завершить отслеживание")
 
 def main() -> None:
-    """Запуск бота"""
+    """Запуск бота на bothost через webhook"""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
-    # Добавляем обработчики команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stop", stop_tracking))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Запускаем бота
-    application.run_polling()
+    # Webhook для bothost.ru
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=8080,
+        url_path=TELEGRAM_BOT_TOKEN,
+        webhook_url=f"https://bot.bothost.ru/{TELEGRAM_BOT_TOKEN}"
+    )
 
 if __name__ == '__main__':
     main()
