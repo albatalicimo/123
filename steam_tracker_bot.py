@@ -20,9 +20,8 @@ logging.basicConfig(
 
 STEAM_API_KEY = "56716E5D4FE456305205C86778E0824E"
 TELEGRAM_BOT_TOKEN = "7643881318:AAF-vT733q8-LJEa59guE9U7fE3vpBaU2mM"
-CHECK_INTERVAL = 60  # секунд
+CHECK_INTERVAL = 60
 
-# Глобальные словари
 user_tracking = {}
 tasks = {}
 status_history = {}
@@ -40,11 +39,9 @@ class StatusPeriod:
         return self.end_time - self.start_time
 
     def __repr__(self):
-        game_str = f" 🎮 {self.game_info.get('name', '')}" if self.game_info else ""
+        game_str = f" 🎮 {self.game_info.get('name', '')}" if self.game_info.get('name') else ""
         status_name = "🟠 Отошел во время игры" if self.status == 3 and self.game_info else get_status_name(self.status)
-        return (f"{status_name}{game_str}\n"
-                f"⏱️ В статусе: {format_time_delta(self.duration)} "
-                f"с {self.start_time.strftime('%H:%M')} по {self.end_time.strftime('%H:%M')}")
+        return f"{status_name}{game_str}\n⏱️ В статусе: {format_time_delta(self.duration)} с {self.start_time.strftime('%H:%M')} по {self.end_time.strftime('%H:%M')}"
 
 
 async def get_steam_user_summary(steam_id: str):
@@ -77,7 +74,6 @@ async def get_steam_game_info(appid: int):
         return None
 
 
-# ====================== ОБРАБОТЧИКИ ======================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📋 Отслеживаемые пользователи", callback_data='list_users')],
@@ -129,12 +125,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_info = await get_steam_user_summary(steam_id)
     if not user_info:
-        await update.message.reply_text("⚠️ Не удалось получить данные по этому SteamID")
+        await update.message.reply_text("⚠️ Не удалось получить данные по SteamID")
         return
 
     user_name = user_info.get('personaname', 'Неизвестно')
     current_status = user_info.get('personastate', 0)
-    game_info = {'name': user_info['gameextrainfo'], 'appid': user_info.get('gameid')} if 'gameextrainfo' in user_info else None
+    game_info = {'name': user_info.get('gameextrainfo'), 'appid': user_info.get('gameid')} if user_info.get('gameextrainfo') else None
 
     chat_id = update.message.chat_id
 
@@ -163,12 +159,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task = asyncio.create_task(check_user_status(chat_id, steam_id, context.application))
     tasks[(chat_id, steam_id)] = task
 
-    await update.message.reply_text(
-        f"✅ Начал отслеживание\n"
-        f"👤 {user_name}\n"
-        f"🆔 {steam_id}\n"
-        f"Статус: {get_status_name(current_status)}{f' 🎮 {game_info['name']}' if game_info else ''}"
-    )
+    game_text = f" 🎮 {game_info['name']}" if game_info and game_info.get('name') else ""
+    await update.message.reply_text(f"✅ Начал отслеживание\n👤 {user_name}\n🆔 {steam_id}\nСтатус: {get_status_name(current_status)}{game_text}")
 
 
 async def check_user_status(chat_id: int, steam_id: str, app: Application):
@@ -182,19 +174,22 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
             if user_info:
                 current_status = user_info.get('personastate', 0)
-                current_game = {'name': user_info['gameextrainfo'], 'appid': user_info.get('gameid')} if 'gameextrainfo' in user_info else None
+                current_game = {'name': user_info.get('gameextrainfo'), 'appid': user_info.get('gameid')} if user_info.get('gameextrainfo') else None
 
                 last_status = user_data['last_status']
-                last_game = user_data['last_game']
+                last_game = user_data.get('last_game')
 
                 if current_status != last_status or current_game != last_game:
                     time_str = format_time_delta(datetime.now() - user_data['status_start_time'])
 
                     lines = [f"🔄 Изменение статуса {user_data['name']}:"]
+                    
                     if current_status != last_status:
-                        lines.append(f"Был: {get_status_name(last_status)}{f' 🎮 {last_game['name']}' if last_game else ''}")
+                        old_game = f" 🎮 {last_game['name']}" if last_game and last_game.get('name') else ""
+                        new_game = f" 🎮 {current_game['name']}" if current_game and current_game.get('name') else ""
+                        lines.append(f"Был: {get_status_name(last_status)}{old_game}")
                         lines.append(f"В статусе: {time_str}")
-                        lines.append(f"Стал: {get_status_name(current_status)}{f' 🎮 {current_game['name']}' if current_game else ''}")
+                        lines.append(f"Стал: {get_status_name(current_status)}{new_game}")
                     else:
                         if current_game and not last_game:
                             lines.append(f"🔼 Начал играть в: {current_game['name']}")
@@ -222,35 +217,27 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
 
 def get_status_name(status: int) -> str:
-    names = {
-        0: "🔴 Оффлайн",
-        1: "🟢 Онлайн",
-        2: "🟡 Занят",
-        3: "🟠 Отошёл",
-        4: "💤 Спит",
-        5: "💰 Хочет торговать",
-        6: "🎮 Хочет играть"
-    }
+    names = {0: "🔴 Оффлайн", 1: "🟢 Онлайн", 2: "🟡 Занят", 3: "🟠 Отошёл",
+             4: "💤 Спит", 5: "💰 Хочет торговать", 6: "🎮 Хочет играть"}
     return names.get(status, "❓ Неизвестно")
 
 
 def format_time_delta(delta: timedelta) -> str:
     total = int(delta.total_seconds())
-    hours, rem = divmod(total, 3600)
-    minutes, _ = divmod(rem, 60)
-    return f"{hours} ч {minutes} мин" if hours else f"{minutes} мин"
+    h, rem = divmod(total, 3600)
+    m, _ = divmod(rem, 60)
+    return f"{h} ч {m} мин" if h else f"{m} мин"
 
 
-# ====================== ЗАПУСК ======================
+# ====================== ЗАПУСК НА BOTHOST ======================
 def main():
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stop", lambda u, c: None))  # заглушка, если нужно
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Webhook для bothost.ru
+    # Webhook — обязательно для bothost
     application.run_webhook(
         listen="0.0.0.0",
         port=8080,
@@ -258,9 +245,6 @@ def main():
         webhook_url=f"https://bot.bothost.ru/{TELEGRAM_BOT_TOKEN}"
     )
 
-
-if __name__ == '__main__':
-    main()
 
 if __name__ == '__main__':
     main()
