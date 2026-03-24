@@ -12,11 +12,7 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 
-# ====================== НАСТРОЙКИ ======================
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 STEAM_API_KEY = "56716E5D4FE456305205C86778E0824E"
 TELEGRAM_BOT_TOKEN = "7643881318:AAF-vT733q8-LJEa59guE9U7fE3vpBaU2mM"
@@ -54,23 +50,6 @@ async def get_steam_user_summary(steam_id: str):
                 return data['response']['players'][0] if data.get('response', {}).get('players') else None
     except Exception as e:
         logging.error(f"Steam API error: {e}")
-        return None
-
-
-async def get_steam_game_info(appid: int):
-    if not appid:
-        return None
-    url = f"https://store.steampowered.com/api/appdetails?appids={appid}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                if str(appid) in data and data[str(appid)]['success']:
-                    return {'name': data[str(appid)]['data']['name'], 'appid': appid}
-                return None
-    except Exception as e:
-        logging.error(f"Game info error: {e}")
         return None
 
 
@@ -125,17 +104,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_info = await get_steam_user_summary(steam_id)
     if not user_info:
-        await update.message.reply_text("⚠️ Не удалось получить данные по SteamID")
+        await update.message.reply_text("⚠️ Не удалось получить данные")
         return
 
     user_name = user_info.get('personaname', 'Неизвестно')
     current_status = user_info.get('personastate', 0)
-    game_info = None
-    if user_info.get('gameextrainfo'):
-        game_info = {
-            'name': user_info['gameextrainfo'],
-            'appid': user_info.get('gameid')
-        }
+    game_info = {'name': user_info.get('gameextrainfo'), 'appid': user_info.get('gameid')} if user_info.get('gameextrainfo') else None
 
     chat_id = update.message.chat_id
 
@@ -148,7 +122,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     now = datetime.now()
-
     user_tracking[chat_id][steam_id] = {
         'name': user_name,
         'last_status': current_status,
@@ -179,12 +152,7 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
             if user_info:
                 current_status = user_info.get('personastate', 0)
-                current_game = None
-                if user_info.get('gameextrainfo'):
-                    current_game = {
-                        'name': user_info['gameextrainfo'],
-                        'appid': user_info.get('gameid')
-                    }
+                current_game = {'name': user_info.get('gameextrainfo'), 'appid': user_info.get('gameid')} if user_info.get('gameextrainfo') else None
 
                 last_status = user_data['last_status']
                 last_game = user_data.get('last_game')
@@ -193,7 +161,6 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
                     time_str = format_time_delta(datetime.now() - user_data['status_start_time'])
 
                     lines = [f"🔄 Изменение статуса {user_data['name']}:"]
-                    
                     if current_status != last_status:
                         old_game = f" 🎮 {last_game['name']}" if last_game and last_game.get('name') else ""
                         new_game = f" 🎮 {current_game['name']}" if current_game and current_game.get('name') else ""
@@ -208,7 +175,6 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
                     await app.bot.send_message(chat_id=chat_id, text="\n".join(lines))
 
-                    # Обновление истории
                     now = datetime.now()
                     hist = status_history[chat_id][steam_id]
                     hist['current_period'].end_time = now
@@ -227,10 +193,8 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
 
 def get_status_name(status: int) -> str:
-    names = {
-        0: "🔴 Оффлайн", 1: "🟢 Онлайн", 2: "🟡 Занят", 3: "🟠 Отошёл",
-        4: "💤 Спит", 5: "💰 Хочет торговать", 6: "🎮 Хочет играть"
-    }
+    names = {0: "🔴 Оффлайн", 1: "🟢 Онлайн", 2: "🟡 Занят", 3: "🟠 Отошёл",
+             4: "💤 Спит", 5: "💰 Хочет торговать", 6: "🎮 Хочет играть"}
     return names.get(status, "❓ Неизвестно")
 
 
@@ -241,7 +205,7 @@ def format_time_delta(delta: timedelta) -> str:
     return f"{h} ч {m} мин" if h else f"{m} мин"
 
 
-# ====================== ЗАПУСК ======================
+# ====================== ЗАПУСК НА POLLING ======================
 def main():
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -249,13 +213,8 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Webhook для bothost.ru
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=8080,
-        url_path=TELEGRAM_BOT_TOKEN,
-        webhook_url=f"https://bot.bothost.ru/{TELEGRAM_BOT_TOKEN}"
-    )
+    print("Бот запущен на polling...")
+    application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == '__main__':
