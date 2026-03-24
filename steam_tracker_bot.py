@@ -130,7 +130,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_name = user_info.get('personaname', 'Неизвестно')
     current_status = user_info.get('personastate', 0)
-    game_info = {'name': user_info.get('gameextrainfo'), 'appid': user_info.get('gameid')} if user_info.get('gameextrainfo') else None
+    game_info = None
+    if user_info.get('gameextrainfo'):
+        game_info = {
+            'name': user_info['gameextrainfo'],
+            'appid': user_info.get('gameid')
+        }
 
     chat_id = update.message.chat_id
 
@@ -174,7 +179,12 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
             if user_info:
                 current_status = user_info.get('personastate', 0)
-                current_game = {'name': user_info.get('gameextrainfo'), 'appid': user_info.get('gameid')} if user_info.get('gameextrainfo') else None
+                current_game = None
+                if user_info.get('gameextrainfo'):
+                    current_game = {
+                        'name': user_info['gameextrainfo'],
+                        'appid': user_info.get('gameid')
+                    }
 
                 last_status = user_data['last_status']
                 last_game = user_data.get('last_game')
@@ -192,9 +202,9 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
                         lines.append(f"Стал: {get_status_name(current_status)}{new_game}")
                     else:
                         if current_game and not last_game:
-                            lines.append(f"🔼 Начал играть в: {current_game['name']}")
+                            lines.append(f"🔼 Начал играть в: {current_game.get('name', '')}")
                         elif not current_game and last_game:
-                            lines.append(f"🔽 Перестал играть в: {last_game['name']}")
+                            lines.append(f"🔽 Перестал играть в: {last_game.get('name', '')}")
 
                     await app.bot.send_message(chat_id=chat_id, text="\n".join(lines))
 
@@ -217,8 +227,10 @@ async def check_user_status(chat_id: int, steam_id: str, app: Application):
 
 
 def get_status_name(status: int) -> str:
-    names = {0: "🔴 Оффлайн", 1: "🟢 Онлайн", 2: "🟡 Занят", 3: "🟠 Отошёл",
-             4: "💤 Спит", 5: "💰 Хочет торговать", 6: "🎮 Хочет играть"}
+    names = {
+        0: "🔴 Оффлайн", 1: "🟢 Онлайн", 2: "🟡 Занят", 3: "🟠 Отошёл",
+        4: "💤 Спит", 5: "💰 Хочет торговать", 6: "🎮 Хочет играть"
+    }
     return names.get(status, "❓ Неизвестно")
 
 
@@ -229,7 +241,7 @@ def format_time_delta(delta: timedelta) -> str:
     return f"{h} ч {m} мин" if h else f"{m} мин"
 
 
-# ====================== ЗАПУСК НА BOTHOST ======================
+# ====================== ЗАПУСК ======================
 def main():
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -237,7 +249,7 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Webhook — обязательно для bothost
+    # Webhook для bothost.ru
     application.run_webhook(
         listen="0.0.0.0",
         port=8080,
